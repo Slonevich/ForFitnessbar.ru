@@ -3,9 +3,11 @@ import email
 import imaplib
 import numpy as np
 import pandas as pd
+import os
 from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtWidgets import QFileDialog
-
+from PyQt5.QtWidgets import QTableWidgetItem, QMessageBox
+from tkinter import Tk
+from tkinter.filedialog import askopenfilename
 
 
 class Ui_MainWindow(object):
@@ -45,13 +47,6 @@ class Ui_MainWindow(object):
         self.Orders_list_to_processing.setGeometry(QtCore.QRect(320, 10, 470, 680))
         self.Orders_list_to_processing.setStyleSheet("background-color: rgb(158, 251, 255);")
         self.Orders_list_to_processing.setObjectName("Orders_list_to_processing")
-        self.Orders_list_to_processing.setColumnCount(2)
-        self.Orders_list_to_processing.setRowCount(0)
-        item = QtWidgets.QTableWidgetItem()
-        self.Orders_list_to_processing.setHorizontalHeaderItem(0, item)
-        item = QtWidgets.QTableWidgetItem()
-        self.Orders_list_to_processing.setHorizontalHeaderItem(1, item)
-        self.Orders_list_to_processing.horizontalHeader().setDefaultSectionSize(235)
         self.pushButton_3 = QtWidgets.QPushButton(self.centralwidget)
         self.pushButton_3.setGeometry(QtCore.QRect(10, 330, 300, 150))
         font = QtGui.QFont()
@@ -71,31 +66,52 @@ class Ui_MainWindow(object):
         MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
         self.pushButton.setText(_translate("MainWindow", "Take list of paid orders \n"
                                                          " from mail to processing"))
-        self.pushButton_2.setText(_translate("MainWindow", "Load file from Excel"))
-        item = self.Orders_list_to_processing.horizontalHeaderItem(0)
-        item.setText(_translate("MainWindow", "ID"))
-        item = self.Orders_list_to_processing.horizontalHeaderItem(1)
-        item.setText(_translate("MainWindow", "Order number"))
+        self.pushButton_2.setText(_translate("MainWindow", "Load file from computer"))
         self.pushButton_3.setText(_translate("MainWindow", "process in 1C"))
 
-    def add_function(self):
-        self.pushButton.clicked.connect(lambda: self.order_processing())  # кнопка обработки писем
-        self.pushButton_2.clicked.connect(lambda: self.action_cliked())
-        self.pushButton_3.clicked.connect(lambda: self.action_cliked())
+    def add_function(self):  # добавляем функции кнопкам
+        self.pushButton.clicked.connect(lambda: order_processing())
+        self.pushButton.clicked.connect(lambda: self.display_table(excel_file_path))
+        self.pushButton_2.clicked.connect(lambda: self.file_to_open())
+        # self.pushButton_3.clicked.connect()
 
-    # def action_cliked(self):  # активирует клик согласно надписи на кнопке
-    #     action = self.sender()
-    #     if action.text() == "Take list of paid orders \n from mail to processing":
-    #         self.order_processing()
-    #         f = open('Y:\Виталий\Новая папка\Программирование\Phyton\MyProjectForWork/OrderNumbers.xlsx', 'r')
-    #     elif action.text() == "Load file from Excel":
-    #         fname = QFileDialog.getOpenFileName(self)[0]
-    #
-    #         f = open(fname, 'r')
-    #         with f:
-    #             data = f.read()
+    def file_to_open(self):
+        Tk().withdraw()  # we don't want a full GUI, so keep the root window from appearing
+        fname = askopenfilename()
+        self.display_table(fname)
 
-    def order_processing(self):  # основная функция - обработка заказов с почты
+    def display_table(self, excel_file_dir):  # добавляет данные в QTableWidget из выбранной таблицы
+        filename, file_extension = os.path.splitext(excel_file_dir)
+        if file_extension == '.xlsx':
+            df = pd.read_excel(excel_file_dir)
+            if df.size == 0:
+                return
+
+            df.fillna('', inplace=True)
+            self.Orders_list_to_processing.setRowCount(df.shape[0])  # задаём количество строк из файла
+            self.Orders_list_to_processing.setColumnCount(df.shape[1])  # задаём количество столбцов из файла
+            self.Orders_list_to_processing.setHorizontalHeaderLabels(df.columns)  # задаём названия столбцов из файла
+            # возвращает pandas array object
+            for row in df.iterrows():
+                values = row[1]
+                for col_index, value in enumerate(values):
+                    tableitem = QTableWidgetItem(str(value))
+                    self.Orders_list_to_processing.setItem(row[0], col_index, tableitem)
+        else:
+            error = QMessageBox()
+            error.setWindowTitle('Ошибка')
+            error.setText('Выбран файл неверного формата. Выберите файл .xlsx')
+            error.setIcon(QMessageBox.Warning)
+            error.setStandardButtons(QMessageBox.Ok)
+            error.buttonClicked.connect(self.popup_action)
+            error.exec_()
+
+    def popup_action(self, btn):
+        if btn.text() == "OK":
+            self.file_to_open()
+
+
+def order_processing():  # основная функция - обработка заказов с почты
         mail = imaplib.IMAP4_SSL('mail.fitnessbar.ru')
         mail.login('region-zakaz@fitnessbar.ru', '222QQq222')  # заходим на сервер
         mail.list()  # получаем список папок
@@ -115,12 +131,12 @@ class Ui_MainWindow(object):
             raw_email_string = raw_email.decode(
                 'utf-8')  # Переводим текст письма в кодировку UTF-8 и сохраняем в переменную raw_email_string
             df.loc[len(df)] = order_number(raw_email_string)
-            #  copy_and_delete_mail(latest_email_id)  # переносим в папку и удаляем обработанное письмо
+        # copy_and_delete_mail(latest_email_id)  # переносим в папку и удаляем обработанное письмо
 
         df.index = np.arange(1, len(df) + 1)  # начинаем номерацию индексов с единицы
         df.index.name = 'ID'  # задаём название столбца индексов
         df.to_excel(
-            'Y:\Виталий\Новая папка\Программирование\Phyton\MyProjectForWork/OrderNumbers.xlsx')  # экспорт в Excel
+            'Y:\Виталий\Новая папка\Программирование\Phyton\MyProjectForWork\OrderNumbers.xlsx')  # экспорт в Excel
         mail.close()  # закрываем соединение
 
 
@@ -153,5 +169,8 @@ if __name__ == '__main__':
     ui = Ui_MainWindow()
     ui.setupUi(MainWindow)
     MainWindow.show()
+    excel_file_path = 'OrderNumbers.xlsx'
+    worksheet_name = 'Sheet1'
+
     sys.exit(app.exec_())
 
