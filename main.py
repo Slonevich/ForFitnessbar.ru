@@ -31,7 +31,7 @@ def delete_mail(mail_id): # Функция копирует письмо с пе
 # if __init__ == '__main__':
 
 mail = imaplib.IMAP4_SSL('mail.ru') # mail.fitnessbar.ru
-mail.login('slone123@mail.ru', '') # заходим на сервер раб почта region-zakaz@fitnessbar.ru', '222QQq222
+mail.login('slone123@mail.ru', '') # заходим на сервер раб почта region-zakaz@fitnessbar.ru', ''
 mail.list() # получаем список папок
 mail.select('test', readonly = False) # выбираем папку inbox
 result, data = mail.search(None, "ALL") # Получаем массив со списком найденных почтовых сообщений
