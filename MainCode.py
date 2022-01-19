@@ -4,6 +4,8 @@ import imaplib
 import numpy as np
 import pandas as pd
 import os
+import os.path
+import xlsxwriter
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QTableWidgetItem, QMessageBox
 from tkinter import Tk
@@ -44,11 +46,15 @@ class Ui_MainWindow(object):
         self.pushButton_2.setStyleSheet("background-color: rgb(0, 85, 255);")
         self.pushButton_2.setObjectName("pushButton_2")
         self.Orders_list_to_processing = QtWidgets.QTableWidget(self.centralwidget)
-        self.Orders_list_to_processing.setGeometry(QtCore.QRect(320, 10, 470, 680))
+        self.Orders_list_to_processing.setGeometry(QtCore.QRect(320, 10, 460, 630))
         self.Orders_list_to_processing.setStyleSheet("background-color: rgb(158, 251, 255);")
         self.Orders_list_to_processing.setObjectName("Orders_list_to_processing")
+        self.Order_to_processing = QtWidgets.QTableWidget(self.centralwidget)
+        self.Order_to_processing.setGeometry(QtCore.QRect(10, 330, 300, 150))
+        self.Order_to_processing.setStyleSheet("background-color: rgb(158, 251, 255);")
+        self.Order_to_processing.setObjectName("Orders_list_to_processing")
         self.pushButton_3 = QtWidgets.QPushButton(self.centralwidget)
-        self.pushButton_3.setGeometry(QtCore.QRect(10, 330, 300, 150))
+        self.pushButton_3.setGeometry(QtCore.QRect(10, 490, 300, 150))
         font = QtGui.QFont()
         font.setPointSize(15)
         self.pushButton_3.setFont(font)
@@ -64,39 +70,33 @@ class Ui_MainWindow(object):
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
-        self.pushButton.setText(_translate("MainWindow", "Take list of paid orders \n"
-                                                         " from mail to processing"))
-        self.pushButton_2.setText(_translate("MainWindow", "Load file from computer"))
-        self.pushButton_3.setText(_translate("MainWindow", "process in 1C"))
+        self.pushButton.setText(_translate("MainWindow", "Выгрузить список оплаченных \n"
+                                                         "заказов с почты"))
+        self.pushButton_2.setText(_translate("MainWindow", "Загрузить файл"))
+        self.pushButton_3.setText(_translate("MainWindow", "Обработать в 1C"))
 
     def add_function(self):  # добавляем функции кнопкам
+        # self.pushButton.clicked.connect(lambda: self.dir_to_use())
         self.pushButton.clicked.connect(lambda: order_processing())
-        self.pushButton.clicked.connect(lambda: self.display_table(excel_file_path))
+        self.pushButton.clicked.connect(lambda: self.display_table(order_list_f_name))
         self.pushButton_2.clicked.connect(lambda: self.file_to_open())
-        # self.pushButton_3.clicked.connect()
+        self.pushButton_3.clicked.connect(lambda: self.processing_in_1с(order_list_f_name))
+
+    def processing_in_1с(self, order_list_f_name):  # обработка в 1С + отметка
+        df = pd.read_excel(order_list_f_name)
+        df.at[1, 'Processed'] = 'YES'
+        # for i in range(1, df.shape[0]+1):
+        #     df.iloc[i, "Processed"] = 'YES'
+            # df.loc[i, 'Processed'] = 'YES'
+        df.to_excel(scrip_dir+'\OrderNumbers.xlsx')  # экспорт в Excel
+        self.display_table(order_list_f_name)
 
     def file_to_open(self):
         Tk().withdraw()  # we don't want a full GUI, so keep the root window from appearing
         fname = askopenfilename()
-        self.display_table(fname)
-
-    def display_table(self, excel_file_dir):  # добавляет данные в QTableWidget из выбранной таблицы
-        filename, file_extension = os.path.splitext(excel_file_dir)
+        filename, file_extension = os.path.splitext(fname)
         if file_extension == '.xlsx':
-            df = pd.read_excel(excel_file_dir)
-            if df.size == 0:
-                return
-
-            df.fillna('', inplace=True)
-            self.Orders_list_to_processing.setRowCount(df.shape[0])  # задаём количество строк из файла
-            self.Orders_list_to_processing.setColumnCount(df.shape[1])  # задаём количество столбцов из файла
-            self.Orders_list_to_processing.setHorizontalHeaderLabels(df.columns)  # задаём названия столбцов из файла
-            # возвращает pandas array object
-            for row in df.iterrows():
-                values = row[1]
-                for col_index, value in enumerate(values):
-                    tableitem = QTableWidgetItem(str(value))
-                    self.Orders_list_to_processing.setItem(row[0], col_index, tableitem)
+            self.display_table(fname)
         else:
             error = QMessageBox()
             error.setWindowTitle('Ошибка')
@@ -106,7 +106,23 @@ class Ui_MainWindow(object):
             error.buttonClicked.connect(self.popup_action)
             error.exec_()
 
-    def popup_action(self, btn):
+    def display_table(self, order_list_f_name):  # добавляет данные в QTableWidget из выбранной таблицы
+        df = pd.read_excel(order_list_f_name)
+        if df.size == 0:
+            return
+
+        df.fillna('', inplace=True)
+        self.Orders_list_to_processing.setRowCount(df.shape[0])  # задаём количество строк из файла
+        self.Orders_list_to_processing.setColumnCount(df.shape[1])  # задаём количество столбцов из файла
+        self.Orders_list_to_processing.setHorizontalHeaderLabels(df.columns)  # задаём названия столбцов из файла
+        # возвращает pandas array object
+        for row in df.iterrows():
+            values = row[1]
+            for col_index, value in enumerate(values):
+                tableitem = QTableWidgetItem(str(value))
+                self.Orders_list_to_processing.setItem(row[0], col_index, tableitem)
+
+    def popup_action(self, btn):  # кнопка всплывающего окна ошибки
         if btn.text() == "OK":
             self.file_to_open()
 
@@ -119,7 +135,7 @@ def order_processing():  # основная функция - обработка 
         result, data = mail.search(None, "ALL")  # Получаем массив со списком найденных почтовых сообщений
         ids = data[0]  # Сохраняем в переменную ids строку с номерами писем
         id_list = ids.split()  # Получаем массив номеров писем
-        df = pd.DataFrame(columns=['Order number'])  # создаём датафрейм с названным столбцом
+        df = pd.DataFrame(columns=['Order number', 'Processed'])  # создаём датафрейм с названным столбцом
 
         for num in range(len(id_list)):
             latest_email_id = id_list[
@@ -130,13 +146,17 @@ def order_processing():  # основная функция - обработка 
             raw_email = data[0][1]  # В переменную raw_email заносим необработанное письмо
             raw_email_string = raw_email.decode(
                 'utf-8')  # Переводим текст письма в кодировку UTF-8 и сохраняем в переменную raw_email_string
-            df.loc[len(df)] = order_number(raw_email_string)
+            df.loc[len(df)] = [order_number(raw_email_string), 'NO']
         # copy_and_delete_mail(latest_email_id)  # переносим в папку и удаляем обработанное письмо
 
-        df.index = np.arange(1, len(df) + 1)  # начинаем номерацию индексов с единицы
+        # df.index = np.arange(1, len(df) + 1)  # начинаем номерацию индексов с единицы
         df.index.name = 'ID'  # задаём название столбца индексов
-        df.to_excel(
-            'Y:\Виталий\Новая папка\Программирование\Phyton\MyProjectForWork\OrderNumbers.xlsx')  # экспорт в Excel
+        check_file = os.path.exists(scrip_dir+'\OrderNumbers.xlsx')
+        if not check_file:
+            workbook = xlsxwriter.Workbook('OrderNumbers.xlsx')
+            worksheet = workbook.add_worksheet()
+            workbook.close()
+        df.to_excel(scrip_dir+'\OrderNumbers.xlsx')  # экспорт в Excel
         mail.close()  # закрываем соединение
 
 
@@ -169,8 +189,8 @@ if __name__ == '__main__':
     ui = Ui_MainWindow()
     ui.setupUi(MainWindow)
     MainWindow.show()
-    excel_file_path = 'OrderNumbers.xlsx'
+    order_list_f_name = 'OrderNumbers.xlsx'  # называем файл для выгрузки и обработки заказов
     worksheet_name = 'Sheet1'
-
+    scrip_dir = os.path.abspath(os.curdir)  # задаём переменной значение директории файла скрипта
     sys.exit(app.exec_())
 
