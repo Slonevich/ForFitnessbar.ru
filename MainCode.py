@@ -5,10 +5,12 @@ import pandas as pd
 import os
 import os.path
 import xlsxwriter
+import configparser
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QTableWidgetItem, QMessageBox, QStyledItemDelegate
-from tkinter import Tk
+from tkinter import Tk, filedialog
 from tkinter.filedialog import askopenfilename
+from functools import partial
 
 
 class ReadOnlyDelegate(QStyledItemDelegate):
@@ -64,7 +66,6 @@ class Ui_MainWindow(object):
         self.Order_to_processing.setColumnWidth(1, 140)
         delegate = ReadOnlyDelegate()
         self.Order_to_processing.setItemDelegateForColumn(0, delegate)
-        # self.Order_to_processing.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
         self.pushButton_3 = QtWidgets.QPushButton(self.centralwidget)
         self.pushButton_3.setGeometry(QtCore.QRect(10, 490, 300, 150))
         font = QtGui.QFont()
@@ -72,12 +73,29 @@ class Ui_MainWindow(object):
         self.pushButton_3.setFont(font)
         self.pushButton_3.setStyleSheet("background-color: rgb(0, 85, 255);")
         self.pushButton_3.setObjectName("pushButton_3")
+        self.pushButton_4 = QtWidgets.QPushButton(self.centralwidget)
+        self.pushButton_4.setGeometry(QtCore.QRect(100, 420, 130, 40))
+        self.pushButton_4.setStyleSheet("background-color: rgb(85, 85, 127);")
+        self.pushButton_4.setObjectName("pushButton_4")
+
+        self.checkBox = QtWidgets.QCheckBox(self.centralwidget)
+        self.checkBox.setEnabled(True)
+        self.checkBox.setChecked(True)
+        self.checkBox.setGeometry(QtCore.QRect(20, 650, 170, 15))
+        self.checkBox.setStyleSheet("alternate-background-color: rgb(85, 255, 255);")
+        self.checkBox.setTristate(False)
+        self.checkBox.setObjectName("checkBox")
+        self.label_2 = QtWidgets.QLabel(self.centralwidget)
+        self.label_2.setGeometry(QtCore.QRect(210, 650, 570, 15))
+        self.label_2.setStyleSheet("background-color: rgb(0, 255, 255);")
+        self.label_2.setObjectName("label_2")
         MainWindow.setCentralWidget(self.centralwidget)
 
         self.retranslateUi(MainWindow)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
-        self.add_function()
+        self.display_table(order_list_f_name)  # отображаем файл со списком заказов, если он есть - либо новый, пустой
+        self.add_function()  # добавляем функционал кнопкам
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
@@ -86,6 +104,10 @@ class Ui_MainWindow(object):
                                                          "заказов с почты"))
         self.pushButton_2.setText(_translate("MainWindow", "Загрузить файл"))
         self.pushButton_3.setText(_translate("MainWindow", "Обработать в 1C"))
+        self.pushButton_4.setText(_translate("MainWindow", "добавить заказ"))
+        self.checkBox.setText(_translate("MainWindow", "Путь к файлу по умолчанию"))
+        self.label_2.setText(_translate("MainWindow", work_dir))
+
 
     def add_function(self):  # добавляем функции кнопкам
         # self.pushButton.clicked.connect(lambda: self.dir_to_use())
@@ -93,19 +115,49 @@ class Ui_MainWindow(object):
         self.pushButton.clicked.connect(lambda: self.display_table(order_list_f_name))
         self.pushButton_2.clicked.connect(lambda: self.file_to_open())
         self.pushButton_3.clicked.connect(lambda: self.processing_in_1с(order_list_f_name))
+        self.pushButton_4.clicked.connect(lambda: self.add_order(order_list_f_name))
+        enable_slot = partial(self.enable_mod)
+        disable_slot = partial(self.disable_mod)
+        self.checkBox.stateChanged.connect(lambda x: enable_slot() if x else disable_slot())
+
+    def enable_mod(self):
+        self.checkBox.setText("Путь к файлу по умолчанию")
+        self.label_2.setText(work_dir)
+
+    def disable_mod(self):
+        Tk().withdraw()
+        new_dir_name = filedialog.askdirectory()
+        self.label_2.setText("Новый путь к файлу: " + new_dir_name)
+        global work_dir
+        work_dir = new_dir_name
+
+    def add_order(self, order_list_f_name):  # добавление файла к обработке ручным вводом
+        df2 = pd.DataFrame(columns=['ID', 'Order number', 'Processed'])  # создаём датафрейм с названным столбцом
+        df = pd.read_excel(work_dir + '\\' + order_list_f_name)
+        self.Order_to_processing.setItem(0, 0, QtWidgets.QTableWidgetItem(str(len(df)+1)))  # ID по таблице
+        df2.loc[0] = [int(self.Order_to_processing.item(0, 0).text()), int(self.Order_to_processing.item(0, 1).text()), 'NO']
+        frames = [df, df2]
+        result = pd.concat(frames)  # объединение данных файла и обработки
+        result = result.sort_values(by=['ID'])  # сортируем по колонке ID
+        result.to_excel(work_dir + '\\' + order_list_f_name, index=False)  # экспорт в Excel
+        self.display_table(order_list_f_name)
 
     def processing_in_1с(self, order_list_f_name):  # обработка в 1С + отметка
-        df = pd.read_excel(order_list_f_name)
+        df = pd.read_excel(work_dir + '\\' + order_list_f_name)
         for i in range(len(df)):
             df.at[i, 'Processed'] = 'YES'
-        df.to_excel(script_dir+'\OrderNumbers.xlsx', index=False)  # экспорт в Excel без столбца индексов
+        df.to_excel(work_dir + '\\' + order_list_f_name, index=False)  # экспорт в Excel без столбца индексов
         self.display_table(order_list_f_name)
 
     def file_to_open(self):  # функция открытия Excel файла с проверкой расширения
-        Tk().withdraw()  # we don't want a full GUI, so keep the root window from appearing
-        fname = askopenfilename()
-        filename, file_extension = os.path.splitext(fname)
+        Tk().withdraw()
+        file_path = askopenfilename()
+        directory = os.path.split(file_path)[0]
+        fname = os.path.split(file_path)[1]
+        filename, file_extension = os.path.splitext(file_path)
         if file_extension == '.xlsx':
+            global work_dir
+            work_dir = directory
             self.display_table(fname)
         else:
             error = QMessageBox()
@@ -117,11 +169,8 @@ class Ui_MainWindow(object):
             error.exec_()
 
     def display_table(self, order_list_f_name):  # добавляет данные в виджет программы из выбранной таблицы
-        df = pd.read_excel(order_list_f_name)
-        if df.size == 0:
-            return
-
-        df.fillna('', inplace=True)
+        df = pd.read_excel(work_dir + '\\' + order_list_f_name)
+        df.fillna('', inplace=True)  # заменяем\смещаем пустые ячейки
         self.Orders_list_to_processing.setRowCount(df.shape[0])  # задаём количество строк из файла
         self.Orders_list_to_processing.setColumnCount(df.shape[1])  # задаём количество столбцов из файла
         self.Orders_list_to_processing.setHorizontalHeaderLabels(df.columns)  # задаём названия столбцов из файла
@@ -157,20 +206,20 @@ def order_processing():  # основная функция - обработка 
                 'utf-8')  # Переводим текст письма в кодировку UTF-8 и сохраняем в переменную raw_email_string
             df.loc[len(df)] = [num, order_number(raw_email_string), 'NO']
         # copy_and_delete_mail(latest_email_id)  # переносим в папку и удаляем обработанное письмо
-        check_file = os.path.exists(script_dir+'\OrderNumbers.xlsx')
-        if not check_file:  # проверка существует ли уже файл выгрузки
-            workbook = xlsxwriter.Workbook('OrderNumbers.xlsx')
-            worksheet = workbook.add_worksheet()
-            workbook.close()
-            df.to_excel(script_dir+'\OrderNumbers.xlsx', index=False)  # экспорт в Excel
-        else:
-            df2 = pd.read_excel(order_list_f_name)
-            df.loc[df['ID'] <= len(df2)+1, 'ID'] = df['ID']+len(df2)
-            frames = [df, df2]
-            result = pd.concat(frames)  # объединение данных файла и обработки
-            result = result.sort_values(by=['ID'])  # сортируем по колонке ID
-            result.to_excel(script_dir+'\OrderNumbers.xlsx', index=False)  # экспорт в Excel
+        df2 = pd.read_excel(work_dir + '\\' + order_list_f_name)
+        df.loc[df['ID'] <= len(df2)+1, 'ID'] = df['ID']+len(df2)
+        frames = [df, df2]
+        result = pd.concat(frames)  # объединение данных файла и обработки
+        result = result.sort_values(by=['ID'])  # сортируем по колонке ID
+        result.to_excel(work_dir + '\\' + order_list_f_name, index=False)  # экспорт в Excel
         mail.close()  # закрываем соединение
+
+
+def create_default_config():  # создаём файл со стандартными настройками
+    config = configparser.ConfigParser()
+    config['DEFAULT'] = {'order_list_f_name': 'OrderNumbers.xlsx', 'work_dir': os.path.abspath(os.curdir)}
+    with open('config.ini', 'w') as configfile:
+        config.write(configfile)
 
 
 def order_number(raw_email_string):  # функция возвращает номер заказа из текста письма
@@ -197,13 +246,21 @@ def copy_and_delete_mail(mail_id):  # Функция копирует письм
 
 if __name__ == '__main__':
     import sys
+    create_default_config()
+    order_list_f_name = 'OrderNumbers.xlsx'  # называем файл для выгрузки и обработки заказов
+    worksheet_name = 'Sheet1'
+    work_dir = os.path.abspath(os.curdir)  # задаём директории по умолчанию значение директории файла скрипта
+    check_file = os.path.exists(work_dir + '\\' + order_list_f_name)
+    if not check_file:  # проверка существует ли уже файл выгрузки
+        workbook = xlsxwriter.Workbook(work_dir + '\\' + order_list_f_name)
+        worksheet = workbook.add_worksheet()
+        workbook.close()
+        empty_df = pd.DataFrame(columns=['ID', 'Order number', 'Processed'])  # создаём датафрейм с названными столбцами
+        empty_df.to_excel(work_dir + '\\' + order_list_f_name, index=False)  # экспорт в Excel
     app = QtWidgets.QApplication(sys.argv)
     MainWindow = QtWidgets.QMainWindow()
     ui = Ui_MainWindow()
     ui.setupUi(MainWindow)
     MainWindow.show()
-    order_list_f_name = 'OrderNumbers.xlsx'  # называем файл для выгрузки и обработки заказов
-    worksheet_name = 'Sheet1'
-    script_dir = os.path.abspath(os.curdir)  # задаём переменной значение директории файла скрипта
     sys.exit(app.exec_())
 
