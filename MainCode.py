@@ -12,6 +12,7 @@ import tkinter as tk
 from tkinter import Tk, filedialog, simpledialog
 from tkinter.filedialog import askopenfilename
 from functools import partial
+from datetime import datetime
 
 
 class ReadOnlyDelegate(QStyledItemDelegate):
@@ -39,16 +40,13 @@ class Ui_MainWindow(object):
         self.label.setAlignment(QtCore.Qt.AlignCenter)
         self.label.setObjectName("label")
         self.pushButton = QtWidgets.QPushButton(self.centralwidget)
-        self.pushButton.setGeometry(QtCore.QRect(10, 10, 300, 150))
-        font = QtGui.QFont()
+        self.pushButton.setGeometry(QtCore.QRect(10, 10, 300, 120))
         font.setPointSize(15)
         self.pushButton.setFont(font)
         self.pushButton.setStyleSheet("background-color: rgb(0, 85, 255);")
         self.pushButton.setObjectName("pushButton")
         self.pushButton_2 = QtWidgets.QPushButton(self.centralwidget)
-        self.pushButton_2.setGeometry(QtCore.QRect(10, 170, 300, 150))
-        font = QtGui.QFont()
-        font.setPointSize(15)
+        self.pushButton_2.setGeometry(QtCore.QRect(10, 140, 300, 120))
         self.pushButton_2.setFont(font)
         self.pushButton_2.setStyleSheet("background-color: rgb(0, 85, 255);")
         self.pushButton_2.setObjectName("pushButton_2")
@@ -57,7 +55,7 @@ class Ui_MainWindow(object):
         self.Orders_list_to_processing.setStyleSheet("background-color: rgb(158, 251, 255);")
         self.Orders_list_to_processing.setObjectName("Orders_list_to_processing")
         self.Order_to_processing = QtWidgets.QTableWidget(self.centralwidget)
-        self.Order_to_processing.setGeometry(QtCore.QRect(10, 330, 300, 150))
+        self.Order_to_processing.setGeometry(QtCore.QRect(10, 270, 300, 120))
         self.Order_to_processing.setStyleSheet("background-color: rgb(158, 251, 255);")
         self.Order_to_processing.setObjectName("Order_to_processing")
         self.Order_to_processing.setRowCount(1)
@@ -68,16 +66,20 @@ class Ui_MainWindow(object):
         delegate = ReadOnlyDelegate()
         self.Order_to_processing.setItemDelegateForColumn(0, delegate)
         self.pushButton_3 = QtWidgets.QPushButton(self.centralwidget)
-        self.pushButton_3.setGeometry(QtCore.QRect(10, 490, 300, 150))
-        font = QtGui.QFont()
-        font.setPointSize(15)
+        self.pushButton_3.setGeometry(QtCore.QRect(10, 400, 300, 120))
         self.pushButton_3.setFont(font)
         self.pushButton_3.setStyleSheet("background-color: rgb(0, 85, 255);")
         self.pushButton_3.setObjectName("pushButton_3")
         self.pushButton_4 = QtWidgets.QPushButton(self.centralwidget)
-        self.pushButton_4.setGeometry(QtCore.QRect(100, 420, 130, 40))
+        self.pushButton_4.setGeometry(QtCore.QRect(100, 340, 130, 40))
         self.pushButton_4.setStyleSheet("background-color: rgb(85, 85, 127);")
         self.pushButton_4.setObjectName("pushButton_4")
+        self.pushButton_5 = QtWidgets.QPushButton(self.centralwidget)
+        self.pushButton_5.setGeometry(QtCore.QRect(10, 530, 300, 120))
+        self.pushButton_5.setFont(font)
+        self.pushButton_5.setStyleSheet("background-color: rgb(0, 85, 255);")
+        self.pushButton_5.setObjectName("pushButton_5")
+
 
         self.checkBox = QtWidgets.QCheckBox(self.centralwidget)
         self.checkBox.setEnabled(True)
@@ -106,6 +108,8 @@ class Ui_MainWindow(object):
         self.pushButton_2.setText(_translate("MainWindow", "Загрузить файл"))
         self.pushButton_3.setText(_translate("MainWindow", "Обработать в 1C"))
         self.pushButton_4.setText(_translate("MainWindow", "добавить заказ"))
+        self.pushButton_5.setText(_translate("MainWindow", "Обработать отчёты \n"
+                                                           "Solid Express"))
         self.checkBox.setText(_translate("MainWindow", "Путь к файлу по умолчанию"))
         self.label_2.setText(_translate("MainWindow", config['DEFAULT']['work_dir']))
 
@@ -115,9 +119,36 @@ class Ui_MainWindow(object):
         self.pushButton_2.clicked.connect(lambda: self.file_to_open())
         self.pushButton_3.clicked.connect(lambda: self.processing_in_1c())
         self.pushButton_4.clicked.connect(lambda: self.add_order())
+        self.pushButton_5.clicked.connect(lambda: self.report_process())
         enable_slot = partial(self.enable_mod)
         disable_slot = partial(self.disable_mod)
         self.checkBox.stateChanged.connect(lambda x: enable_slot() if x else disable_slot())
+
+    def report_process(self):
+        folder_name = 'Reports'
+        mail, id_list = email_data(folder_name)
+
+        for num in range(1, len(id_list) + 1):
+            latest_email_id = id_list[-num]  # Задаем переменную, значением которой будет номер последнего письма
+
+            result, data = mail.fetch(latest_email_id,
+                                      "(RFC822)")  # Получаем последнее письмо).
+            raw_email = data[0][1]  # В переменную raw_email заносим необработанное письмо
+            try:
+                email_message = email.message_from_string(raw_email)
+            except TypeError:
+                email_message = email.message_from_bytes(raw_email)
+            for part in email_message.walk():
+                if "application" in part.get_content_type():
+                    current_datetime = datetime.now()
+                    now = str(datetime.now().date()) + '-' + str(current_datetime.hour) + '-' + \
+                          str(current_datetime.minute) + '-' + str(current_datetime.second) + '-' + str(num)
+                    filename = now + '.xls'
+                    fp = open(os.path.join(config['DEFAULT']['work_dir'], filename), 'wb')
+                    fp.write(part.get_payload(decode=1))
+            # copy_and_delete_mail(latest_email_id)  # переносим в папку и удаляем обработанное письмо
+        mail.close()
+        mail.logout()
 
     def enable_mod(self):
         self.checkBox.setText("Путь к файлу по умолчанию")
@@ -192,34 +223,40 @@ class Ui_MainWindow(object):
             self.file_to_open()
 
 
+def email_data(folder_name):  # функция возвращает письма из выбранной папки
+    mail = imaplib.IMAP4_SSL(config['MAIL']['mail_server_name'])
+    mail.login(config['MAIL']['login'], config['MAIL']['password'])  # заходим на сервер
+    mail.list()  # получаем список папок
+    mail.select(folder_name, readonly=False)  # выбираем папку
+    result, data = mail.search(None, "ALL")  # Получаем массив со списком найденных почтовых сообщений
+    ids = data[0]  # Сохраняем в переменную ids строку с номерами писем
+    id_list = ids.split()  # Получаем массив номеров писем
+    return mail, id_list
+
+
 def order_processing():  # основная функция - обработка заказов с почты
-        mail = imaplib.IMAP4_SSL(config['MAIL']['mail_server_name'])
-        mail.login(config['MAIL']['login'], config['MAIL']['password'])  # заходим на сервер
-        mail.list()  # получаем список папок
-        mail.select('inbox', readonly=False)  # выбираем папку
-        result, data = mail.search(None, "ALL")  # Получаем массив со списком найденных почтовых сообщений
-        ids = data[0]  # Сохраняем в переменную ids строку с номерами писем
-        id_list = ids.split()  # Получаем массив номеров писем
-        df = pd.DataFrame(columns=['ID', 'Order number', 'Processed'])  # создаём датафрейм с названным столбцом
+    folder_name = 'inbox'
+    mail, id_list = email_data(folder_name)
+    df = pd.DataFrame(columns=['ID', 'Order number', 'Processed'])  # создаём датафрейм с названным столбцом
 
-        for num in range(1, len(id_list)+1):
-            latest_email_id = id_list[-num]  # Задаем переменную, значением которой будет номер последнего письма
+    for num in range(1, len(id_list)+1):
+        latest_email_id = id_list[-num]  # Задаем переменную, значением которой будет номер последнего письма
 
-            result, data = mail.fetch(latest_email_id,
-                                      "(RFC822)")  # Получаем последнее письмо).
-            raw_email = data[0][1]  # В переменную raw_email заносим необработанное письмо
-            raw_email_string = raw_email.decode(
-                'utf-8')  # Переводим текст письма в кодировку UTF-8 и сохраняем в переменную raw_email_string
-            df.loc[len(df)] = [num, order_number(raw_email_string), 'NO']
-        # copy_and_delete_mail(latest_email_id)  # переносим в папку и удаляем обработанное письмо
-        df2 = pd.read_excel(config['DEFAULT']['work_dir'] + '\\' + config['DEFAULT']['order_list_f_name'])
-        df.loc[df['ID'] <= len(df2)+1, 'ID'] = df['ID']+len(df2)
-        frames = [df, df2]
-        result = pd.concat(frames)  # объединение данных файла и обработки
-        result = result.sort_values(by=['ID'])  # сортируем по колонке ID
-        result.to_excel(config['DEFAULT']['work_dir'] + '\\' + config['DEFAULT']['order_list_f_name'],
-                        index=False)  # экспорт в Excel
-        mail.close()  # закрываем соединение
+        result, data = mail.fetch(latest_email_id,
+                                  "(RFC822)")  # Получаем последнее письмо).
+        raw_email = data[0][1]  # В переменную raw_email заносим необработанное письмо
+        raw_email_string = raw_email.decode(
+            'utf-8')  # Переводим текст письма в кодировку UTF-8 и сохраняем в переменную raw_email_string
+        df.loc[len(df)] = [num, order_number(raw_email_string), 'NO']
+    # copy_and_delete_mail(latest_email_id)  # переносим в папку и удаляем обработанное письмо
+    df2 = pd.read_excel(config['DEFAULT']['work_dir'] + '\\' + config['DEFAULT']['order_list_f_name'])
+    df.loc[df['ID'] <= len(df2)+1, 'ID'] = df['ID']+len(df2)
+    frames = [df, df2]
+    result = pd.concat(frames)  # объединение данных файла и обработки
+    result = result.sort_values(by=['ID'])  # сортируем по колонке ID
+    result.to_excel(config['DEFAULT']['work_dir'] + '\\' + config['DEFAULT']['order_list_f_name'],
+                    index=False)  # экспорт в Excel
+    mail.close()  # закрываем соединение
 
 
 def input_mail_settings():  # функция предлагает пользователю ввести настройки почты для обработки
